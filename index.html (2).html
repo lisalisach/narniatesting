@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>The Engine</title>
+<style>
+  /* ---------- FONTS ---------- */
+  /* Both .otf files must be hosted alongside this HTML, or update the URLs to absolute paths. */
+  @font-face {
+    font-family: "PP Eiko";
+    src: url("PPEiko-Regular__1_.otf") format("opentype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "F37 Hooj";
+    src: url("F37Hooj-Demi.otf") format("opentype");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  /* ---------- DESIGN TOKENS ---------- */
+  :root {
+    --burgundy:        #7A1E2B;
+    --burgundy-deep:   #5E1620;
+    --ink:             #1A1A1A;
+    --ink-muted:       rgba(26, 26, 26, 0.55);
+    --canvas:          #FAFBFE;
+
+    /* Default quadrant fills (resting state) */
+    --q-backend:       #F2DDE0;
+    --q-internal:      #EDD2D6;
+    --q-narnia:        #F7E8EA;
+    --q-external:      #E8C9CE;
+
+    /* Hover/active quadrant fills (deeper tint) */
+    --q-backend-hi:    #E3B5BC;
+    --q-internal-hi:   #DCA8B1;
+    --q-narnia-hi:     #E8BCC3;
+    --q-external-hi:   #D49DA5;
+
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ---------- BASE ---------- */
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--canvas);
+    overflow: hidden;
+  }
+  body {
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+
+  /* ---------- LAYOUT ---------- */
+  .stage {
+    position: relative;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 48px;
+    background: var(--canvas);
+  }
+
+  /* Top-left accent rule removed per request. */
+
+  .title {
+    font-family: "PP Eiko", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(28px, 3.4vw, 44px);
+    line-height: 1.1;
+    margin: 12px 0 36px;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+
+  /* 3-column grid: left cards | wheel | right cards.
+     align-items: center centers each card vertically inside its row, which
+     places every card directly beside its matching pie slice. */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(360px, 1.1fr) minmax(220px, 1fr);
+    grid-template-rows: 1fr 1fr;
+    gap: 40px 56px;
+    align-items: center;
+    min-height: 540px;
+  }
+
+  /* Card cell placement on desktop */
+  .cell--backend  { grid-column: 1; grid-row: 1; }
+  .cell--external { grid-column: 1; grid-row: 2; }
+  .cell--wheel    { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  .cell--internal { grid-column: 3; grid-row: 1; }
+  .cell--narnia   { grid-column: 3; grid-row: 2; }
+
+  .cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* ---------- CARDS ---------- */
+  .card {
+    position: relative;
+    padding: 6px 4px;
+    outline: none;
+    cursor: default;
+  }
+  .card.is-dashed {
+    border: 1.5px dashed var(--burgundy);
+    border-radius: 4px;
+    padding: 22px 24px 26px;
+  }
+  .card-title {
+    font-family: "PP Eiko", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(24px, 2.4vw, 32px);
+    line-height: 1.1;
+    margin: 0 0 12px;
+    color: var(--burgundy);
+    letter-spacing: -0.005em;
+    display: inline-block;
+    position: relative;
+    padding-bottom: 8px;
+    transition: color 200ms var(--ease);
+  }
+  .card-title::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 40px;
+    height: 1px;
+    background: var(--burgundy);
+    transition: width 200ms var(--ease), background 200ms var(--ease);
+  }
+
+  .card ul {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+  }
+  .card ul li {
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--ink-muted);
+    padding-left: 16px;
+    position: relative;
+    transition: color 200ms var(--ease), opacity 200ms var(--ease);
+  }
+  .card ul li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--ink-muted);
+    transition: color 200ms var(--ease);
+  }
+  .card ul ul {
+    margin: 2px 0 4px 6px;
+  }
+  .card ul ul li {
+    font-size: 13.5px;
+    color: rgba(26, 26, 26, 0.4);
+  }
+  .card ul ul li::before {
+    content: "▸";
+    font-size: 10px;
+    top: 2px;
+    color: rgba(26, 26, 26, 0.4);
+  }
+
+  /* "STANDALONE FROM CAPE ENVIRONMENT" caption sits below the dashed box. */
+  .caption-below {
+    margin-top: 14px;
+    padding-left: 2px;
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--burgundy);
+    text-transform: uppercase;
+  }
+
+  /* ---------- HOVER / FOCUS HIGHLIGHT STATE ---------- */
+  .card.is-active .card-title { color: var(--burgundy-deep); }
+  .card.is-active .card-title::after { width: 64px; background: var(--burgundy-deep); }
+  .card.is-active ul li { color: var(--ink); opacity: 1; }
+  .card.is-active ul li::before { color: var(--burgundy); }
+  .card.is-active ul ul li { color: rgba(26, 26, 26, 0.85); }
+  .card.is-active ul ul li::before { color: var(--burgundy); }
+
+  /* Keyboard focus ring for accessibility */
+  .card:focus-visible {
+    outline: 2px solid var(--burgundy);
+    outline-offset: 6px;
+    border-radius: 2px;
+  }
+
+  /* ---------- WHEEL ---------- */
+  .wheel-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+  .wheel {
+    width: 100%;
+    max-width: 440px;
+    height: auto;
+    display: block;
+  }
+  .quadrant {
+    cursor: pointer;
+    transition: fill 200ms var(--ease);
+  }
+  .quadrant:focus { outline: none; }
+  .quadrant:focus-visible {
+    stroke: var(--burgundy-deep);
+    stroke-width: 2;
+  }
+
+  /* Resting fills */
+  .quadrant[data-section="backend"]  { fill: var(--q-backend); }
+  .quadrant[data-section="internal"] { fill: var(--q-internal); }
+  .quadrant[data-section="narnia"]   { fill: var(--q-narnia); }
+  .quadrant[data-section="external"] { fill: var(--q-external); }
+
+  /* Highlighted fills (driven by .is-active class added via JS) */
+  .quadrant.is-active[data-section="backend"]  { fill: var(--q-backend-hi); }
+  .quadrant.is-active[data-section="internal"] { fill: var(--q-internal-hi); }
+  .quadrant.is-active[data-section="narnia"]   { fill: var(--q-narnia-hi); }
+  .quadrant.is-active[data-section="external"] { fill: var(--q-external-hi); }
+
+  .core-circle {
+    fill: var(--burgundy);
+    pointer-events: none;
+  }
+  .arrow {
+    fill: var(--burgundy);
+    pointer-events: none;
+  }
+  .core-label-core {
+    font-family: "F37 Hooj", "PP Eiko", Georgia, serif;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    fill: rgba(255, 255, 255, 0.85);
+    text-transform: uppercase;
+  }
+  .core-label-line {
+    font-family: "PP Eiko", Georgia, serif;
+    font-weight: 400;
+    font-size: 18px;
+    fill: #FFFFFF;
+    letter-spacing: 0.005em;
+  }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 900px) {
+    .stage { padding: 36px 24px; }
+    .grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto auto auto;
+      gap: 32px;
+      min-height: 0;
+    }
+    .cell--wheel    { grid-column: 1; grid-row: 1; }
+    .cell--backend  { grid-column: 1; grid-row: 2; }
+    .cell--internal { grid-column: 1; grid-row: 3; }
+    .cell--external { grid-column: 1; grid-row: 4; }
+    .cell--narnia   { grid-column: 1; grid-row: 5; }
+    .wheel { max-width: 360px; }
+  }
+  @media (max-width: 480px) {
+    .stage { padding: 28px 20px; }
+    .wheel { max-width: 300px; }
+    .title { margin-bottom: 24px; }
+  }
+
+  /* ---------- REDUCED MOTION ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    .quadrant,
+    .card-title,
+    .card-title::after,
+    .card ul li,
+    .card ul li::before,
+    .card ul ul li,
+    .card ul ul li::before {
+      transition: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="grid">
+
+    <!-- BACKEND cell (left, top — beside the TL quadrant) -->
+    <div class="cell cell--backend">
+      <div class="card is-dashed" data-section="backend" tabindex="0" role="group" aria-label="Backend section">
+        <h2 class="card-title">Backend</h2>
+        <ul>
+          <li>Claude Code / Codex</li>
+          <li>VS Code / GitHub</li>
+          <li>Microsoft Azure</li>
+        </ul>
+      </div>
+      <div class="caption-below" aria-hidden="true">STANDALONE FROM CAPE ENVIRONMENT</div>
+    </div>
+
+    <!-- WHEEL (center, spans both rows) -->
+    <div class="cell cell--wheel">
+      <div class="wheel-wrap">
+        <svg class="wheel" viewBox="0 0 400 400" role="img" aria-label="The AI Cape Engine: a four-quadrant process flow.">
+          <!-- Pie quadrants. Each path is a wedge from center to the rim. -->
+          <!-- TL: Backend -->
+          <path class="quadrant" data-section="backend"
+                d="M 200 200 L 50 200 A 150 150 0 0 1 200 50 Z"
+                tabindex="0" role="button" aria-label="Backend quadrant"></path>
+          <!-- TR: Internal -->
+          <path class="quadrant" data-section="internal"
+                d="M 200 200 L 200 50 A 150 150 0 0 1 350 200 Z"
+                tabindex="0" role="button" aria-label="Internal quadrant"></path>
+          <!-- BR: Narnia -->
+          <path class="quadrant" data-section="narnia"
+                d="M 200 200 L 350 200 A 150 150 0 0 1 200 350 Z"
+                tabindex="0" role="button" aria-label="Narnia / Inside Cape quadrant"></path>
+          <!-- BL: External -->
+          <path class="quadrant" data-section="external"
+                d="M 200 200 L 200 350 A 150 150 0 0 1 50 200 Z"
+                tabindex="0" role="button" aria-label="External quadrant"></path>
+
+          <!-- Hairline divider rings and cross-lines to echo the slide's quartered look -->
+          <circle cx="200" cy="200" r="150" fill="none" stroke="#FFFFFF" stroke-width="1.5" pointer-events="none"/>
+          <line x1="50"  y1="200" x2="350" y2="200" stroke="#FFFFFF" stroke-width="1.5" pointer-events="none"/>
+          <line x1="200" y1="50"  x2="200" y2="350" stroke="#FFFFFF" stroke-width="1.5" pointer-events="none"/>
+
+          <!-- Burgundy core -->
+          <circle class="core-circle" cx="200" cy="200" r="62"/>
+          <text class="core-label-core" x="200" y="186" text-anchor="middle">CORE</text>
+          <text class="core-label-line" x="200" y="207" text-anchor="middle">AI Cape</text>
+          <text class="core-label-line" x="200" y="227" text-anchor="middle">Engine</text>
+
+          <!-- Three flow arrows, placed at the wheel's edge next to the white dividing lines. -->
+          <!-- 1) TOP of the circle (by the vertical white line) — pointing right -->
+          <polygon class="arrow" points="194,32 208,40 194,48"/>
+          <!-- 2) RIGHT of the circle (by the horizontal white line) — pointing down -->
+          <polygon class="arrow" points="352,194 368,194 360,208"/>
+          <!-- 3) BOTTOM of the circle (by the vertical white line) — pointing left -->
+          <polygon class="arrow" points="206,352 192,360 206,368"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- INTERNAL cell (right, top — beside the TR quadrant) -->
+    <div class="cell cell--internal">
+      <div class="card" data-section="internal" tabindex="0" role="group" aria-label="Internal section">
+        <h2 class="card-title">Internal</h2>
+        <ul>
+          <li>
+            Dashboard
+            <ul>
+              <li>Monitoring</li>
+              <li>Reporting</li>
+              <li>Managing</li>
+            </ul>
+          </li>
+          <li>Dynamic file management system</li>
+          <li>Research</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- EXTERNAL cell (left, bottom — beside the BL quadrant) -->
+    <div class="cell cell--external">
+      <div class="card" data-section="external" tabindex="0" role="group" aria-label="External section">
+        <h2 class="card-title">External</h2>
+        <ul>
+          <li>Iran conflict gauge</li>
+          <li>Mid-terms</li>
+          <li>Cybersecurity risk</li>
+          <li>Others?</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- NARNIA cell (right, bottom — beside the BR quadrant) -->
+    <div class="cell cell--narnia">
+      <div class="card" data-section="narnia" tabindex="0" role="group" aria-label="Narnia / Inside Cape section">
+        <h2 class="card-title">Narnia / Inside Cape</h2>
+        <ul>
+          <li>Web-based Cape universe</li>
+          <li>Password protected for Cape clients</li>
+          <li>Released later this year</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ---------- HOVER-LINKED HIGHLIGHTING ----------
+     Each quadrant and each card carry a matching data-section attribute.
+     Hovering or focusing either element toggles `.is-active` on both. */
+  (function () {
+    const targets = document.querySelectorAll('[data-section]');
+
+    function setActive(section, on) {
+      document.querySelectorAll('[data-section="' + section + '"]').forEach(function (el) {
+        el.classList.toggle('is-active', on);
+      });
+    }
+
+    targets.forEach(function (el) {
+      const section = el.getAttribute('data-section');
+      el.addEventListener('mouseenter', function () { setActive(section, true); });
+      el.addEventListener('mouseleave', function () { setActive(section, false); });
+      el.addEventListener('focus',      function () { setActive(section, true); });
+      el.addEventListener('blur',       function () { setActive(section, false); });
+      /* Touch: brief highlight on tap, then release */
+      el.addEventListener('touchstart', function () { setActive(section, true); }, { passive: true });
+      el.addEventListener('touchend',   function () { setTimeout(function(){ setActive(section, false); }, 600); });
+    });
+  })();
+
+  /* ---------- IFRAME AUTO-RESIZE ----------
+     Webflow can listen for this postMessage and resize the embedding iframe:
+       window.addEventListener('message', e => {
+         if (e.data && e.data.type === 'resize') {
+           document.getElementById('engine-iframe').style.height = e.data.height + 'px';
+         }
+       });
+  */
+  (function () {
+    function broadcastHeight() {
+      const h = document.documentElement.scrollHeight;
+      try { window.parent.postMessage({ type: 'resize', height: h }, '*'); } catch (e) {}
+    }
+    window.addEventListener('load', broadcastHeight);
+    window.addEventListener('resize', broadcastHeight);
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(broadcastHeight).observe(document.body);
+    }
+  })();
+</script>
+
+</body>
+</html>
